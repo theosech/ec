@@ -1,5 +1,7 @@
 import datetime
 import dill
+import matplotlib.pyplot as plt
+import numpy as np
 import pickle
 
 # from dreamcoder.domains.list.utilsPlotting import plotFrontiers
@@ -9,7 +11,15 @@ from dreamcoder.utilities import vprint
 
 def loadEnumerationResults(filename):
     try:
-        frontiers, times, _ = pickle.load(open("enumerationResults/{}".format(filename), "rb"))
+        frontiers, times, taskToPrograms = pickle.load(open("enumerationResults/{}".format(filename), "rb"))
+        # toPlot = []
+        # for t,numPrograms in taskToPrograms.items():
+        #     if numPrograms is not None:
+        #         print("{}: {}".format(t.name, numPrograms))
+        #         toPlot.append(numPrograms)
+        # # plt.hist(toPlot)
+        # # plt.show()
+        # print(filename, np.median(toPlot), np.mean(toPlot))
     except ValueError:
         frontiers, times = pickle.load(open("enumerationResults/{}".format(filename), "rb"))
     return frontiers, times
@@ -30,7 +40,7 @@ def enumerateFromGrammar(grammars, tasks, modelName, enumerationTimeout, solver,
                              maximumFrontier=maximumFrontier,
                              verbose=True,
                              evaluationTimeout=1.0,
-                             testing=False,
+                             testing=True,
                              likelihoodModel=None,
                              leaveHoldout=leaveHoldout)
     if save:

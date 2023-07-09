@@ -19,12 +19,12 @@ from dreamcoder.utilities import numberOfCPUs
 
 
 if __name__ == '__main__':
-    args = commandlineArguments(
-        enumerationTimeout=10, activation='tanh', iterations=10, recognitionTimeout=3600,
-        a=3, maximumFrontier=10, topK=2, pseudoCounts=30.0,
-        helmholtzRatio=1.0, structurePenalty=1., useRecognitionModel=True,
-        CPUs=numberOfCPUs(),
-        extras=lambda parser: list_options(prop_sampling_options(parser)),
-        )
-    main(args)
-    # utilsPlotting.main()
+    # args = commandlineArguments(
+    #     enumerationTimeout=10, activation='tanh', iterations=10, recognitionTimeout=3600,
+    #     a=3, maximumFrontier=10, topK=2, pseudoCounts=30.0,
+    #     helmholtzRatio=1.0, structurePenalty=1., useRecognitionModel=True,
+    #     CPUs=numberOfCPUs(),
+    #     extras=lambda parser: list_options(prop_sampling_options(parser)),
+    #     )
+    # main(args)
+    utilsPlotting.main()
