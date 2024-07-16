@@ -8,7 +8,7 @@ from dreamcoder.type import *
 from dreamcoder.utilities import eprint
 
 import math
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 import torch
 

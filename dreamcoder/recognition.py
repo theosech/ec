@@ -10,7 +10,7 @@ from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence
 
 import copy
-import dill
+# import dill
 import numpy as np
 # luke
 import json

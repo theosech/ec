@@ -1,14 +1,14 @@
 import dill
-import numpy as np
 import pandas as pd
-from dreamcoder.compression import induceGrammar
-from dreamcoder.grammar import Grammar
+import numpy as np
+
 from dreamcoder.fragmentGrammar import FragmentGrammar
-from dreamcoder.program import Program
 from dreamcoder.utilities import vprint, numberOfCPUs, parallelMap
 
-from dreamcoder.domains.list.utilsProperties import createFrontiersWithInputsFromTask
+from dreamcoder.properties.utils import createFrontiersWithInputsFromTask
 
+DATA_DIR = "data/prop_sig/"
+SAMPLED_PROPERTIES_DIR = "sampled_properties/"
 MAX_NUM_SIM_TASKS_TO_PRINT = 5
 THRESHOLD_POSTERIOR_SUM = 500
 NEURAL_RECOGNITION_MODEL_PATH = "data/prop_sig/recognitionModels/josh_rich_enumerated_1/learned_9740_enumeratedFrontiers_ep=True_RS=None_RT=7200.pkl"
@@ -60,6 +60,7 @@ def getTaskSimilarFrontier(
             recomputeTasksWithTaskSpecificInputs=recomputeTasksWithTaskSpecificInputs, computePriorFromTasks=computePriorFromTasks, 
             weightByPropertyPrior=weightByPropertyPrior, verbose=verbose)
     except ZeroPropertiesFound:
+        vprint("No properties found for task {}".format(task), verbose)
         return allFrontiers, [1 for i in range(len(allFrontiers))], False
 
 
@@ -69,7 +70,7 @@ def getTaskSimilarFrontier(
         simProgram = matchingFrontiers[idx].entries[0].program
         solved = task.check(simProgram, timeout=1)
         if solved:
-            print("\nFound program solution for task {}: {}".format(task, simProgram))
+            vprint("\nFound program solution for task {}: {}".format(task, simProgram), verbose)
             break
 
 
@@ -124,7 +125,7 @@ def _getSimilarityScore(taskSig, trainTaskSig, onlyUseTrueProperties):
     return np.sum(similarityVector.astype(int)) / denominator
 
 
-def filterProperties(properties, propTasksMatrix, maxFractionSame, save=False, filename=None):
+def _filterProperties(properties, propTasksMatrix, maxFractionSame, save=False, filename=None):
 
     def fractionSame(a, b):
         return np.sum((a == b).astype(int)) / a.shape[0]
@@ -140,7 +141,7 @@ def filterProperties(properties, propTasksMatrix, maxFractionSame, save=False, f
     filteredProperties = [properties[j] for j in filteredPropertyIds]
     print("Kept {} from {} properties".format(len(filteredProperties), propTasksMatrix.shape[1]))
     if save:
-        path = DATA_DIR + SAMPLED_PROPERTIES_DIR + fileName
+        path = DATA_DIR + SAMPLED_PROPERTIES_DIR + filename
         dill.dump(filteredProperties, open(path, "wb"))
         print("Saved filtered properties at: {}".format(path))
     return filteredProperties
@@ -217,7 +218,7 @@ def createSimilarTasksDf(
         idxs = [propertyToIdx[prop] for prop in properties]
         reorderedPropertySimTasksMatrix = propertySimTasksMatrix[:, idxs].copy()
         reorderedPropertySimTasksMatrix[reorderedPropertySimTasksMatrix != valuesToInt["allTrue"]] = 0
-        properties = filterProperties(properties=properties, propTasksMatrix=reorderedPropertySimTasksMatrix, maxFractionSame=maxFractionSame, save=False, filename=None)
+        properties = _filterProperties(properties=properties, propTasksMatrix=reorderedPropertySimTasksMatrix, maxFractionSame=maxFractionSame, save=False, filename=None)
         sortedPropAndScores = [(p,score) for p,score in sortedPropAndScores if p in properties]
 
     taskSig = np.array([valuesToInt[prop.getValue(task)] for prop in properties])
@@ -282,15 +283,15 @@ def getPriorDistributionsOfProperties(propertySimTasksMatrix, valuesToInt):
 
 def _getSimTaskMatrixAndPropertyPriors(allTasks, frontiers, properties, valuesToInt, computePriorFromTasks):
 
-    print("Creating Similar Task Matrix")
+    # print("Creating Similar Task Matrix")
     propertySimTasksMatrix = getPropertySimTasksMatrix([f.task for f in frontiers], properties, valuesToInt)
-    print("Finished Creating Similar Task Matrix with size: {}".format(propertySimTasksMatrix.shape))
+    # print("Finished Creating Similar Task Matrix with size: {}".format(propertySimTasksMatrix.shape))
     if computePriorFromTasks:
         propertyValsMatrix = getPropertySimTasksMatrix(allTasks, properties, valuesToInt)
         propertyToPriorDistribution = getPriorDistributionsOfProperties(propertyValsMatrix, valuesToInt)
     else:
         propertyToPriorDistribution = getPriorDistributionsOfProperties(propertySimTasksMatrix, valuesToInt)
-        print("propertyToPriorDistribution", propertyToPriorDistribution.shape)
+        # print("propertyToPriorDistribution", propertyToPriorDistribution.shape)
     return propertySimTasksMatrix, propertyToPriorDistribution
 
 def getPropSimGrammars(
@@ -304,7 +305,7 @@ def getPropSimGrammars(
     pseudoCounts, 
     weightedSim, 
     compressSimilar, 
-    weightByPrior, 
+    weightByProgramPrior, 
     recomputeTasksWithTaskSpecificInputs, 
     computePriorFromTasks, 
     filterSimilarProperties, 
@@ -350,7 +351,7 @@ def getPropSimGrammars(
 
             task2SimilarFrontiers[task] = similarFrontiers
             
-            print("{} similar frontiers".format(len(similarFrontiers)))
+            vprint("{} similar frontiers".format(len(similarFrontiers)), verbose)
             if compressSimilar:
                 if len([f for f in similarFrontiers if not f.empty]) == 0:
                     eprint("No compression frontiers; not inducing a grammar this iteration.")
@@ -385,7 +386,7 @@ def getPropSimGrammars(
             else:
                 weights = weights if weightedSim else None
                 vprint(similarFrontiers[0].task.describe(), verbose)
-                taskGrammar = task2Grammar[task].insideOutside(similarFrontiers, pseudoCounts, iterations=1, frontierWeights=weights, weightByPrior=weightByPrior)
+                taskGrammar = task2Grammar[task].insideOutside(similarFrontiers, pseudoCounts, iterations=1, frontierWeights=weights, weightByProgramPrior=weightByProgramPrior)
             
             vprint("\nGrammar after fitting for task {}:\n{}".format(task, taskGrammar), verbose)
             # task2FittedGrammar[task] = taskGrammar

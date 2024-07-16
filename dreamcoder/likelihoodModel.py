@@ -5,9 +5,9 @@ from collections import Counter
 import math
 import numpy as np
 
-from dreamcoder.domains.list.property import getTaskPropertyValue, getTaskPropertyValues, getTaskAllSamePropertyValue, getTaskPropertyEntropy, Property
 from dreamcoder.domains.regex.groundtruthRegexes import gt_dict
 from dreamcoder.program import Program
+from dreamcoder.properties.property import getTaskPropertyValue, getTaskPropertyValues, getTaskAllSamePropertyValue, getTaskPropertyEntropy, Property
 
 gt_dict = {"Data column no. "+str(num): r_str for num, r_str in gt_dict.items()}
 MIN_NUM_NON_ERROR_EXAMPLES = 3
@@ -101,7 +101,6 @@ class TaskSurprisalScore(PropertyScore):
         taskMeanEntropy = np.mean(taskEntropies)
         otherTasksMeanEntropy = np.mean(otherTasksEntropies)
         score = otherTasksMeanEntropy - taskMeanEntropy
-        print("score", score)
         return score > 0.7, score
 
 

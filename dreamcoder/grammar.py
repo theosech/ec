@@ -412,7 +412,7 @@ class Grammar(object):
                     uses[p] += u * math.exp(e.logPosterior)
         return uses
 
-    def insideOutside(self, frontiers, pseudoCounts, iterations=1, frontierWeights=None, weightByPrior=False):
+    def insideOutside(self, frontiers, pseudoCounts, iterations=1, frontierWeights=None, weightByProgramPrior=False):
         # Replace programs with (likelihood summary, uses)
         frontiers = [ Frontier([ FrontierEntry((summary, summary.toUses()),
                                                logPrior=summary.logLikelihood(self),
@@ -432,7 +432,7 @@ class Grammar(object):
                     if frontierWeights is not None:
                         weight = np.exp(frontierWeights[i])
                         u += weight * eu
-                    elif weightByPrior:
+                    elif weightByProgramPrior:
                         u += math.exp(e.logPosterior) * eu
                     else:
                         u += eu

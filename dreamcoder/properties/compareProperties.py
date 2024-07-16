@@ -1,6 +1,6 @@
 import numpy as np
 
-from dreamcoder.domains.list.propSim import getPropertySimTasksMatrix
+from dreamcoder.properties.propSim import getPropertySimTasksMatrix
 
 def compare(handwritten, sampled, tasks, sampledFrontiers, valuesToInt):
     """

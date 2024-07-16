@@ -18,7 +18,9 @@ class ConstantInstantiateVisitor(object):
 
     def primitive(self, e):
         if e.name == "STRING":
-            return Primitive("STRING", e.tp, random.choice(self.words))
+            word = random.choice(self.words)
+            print("ADDING PRIMITIVE: ", word)
+            return Primitive(word, e.tp, word)
         return e
 
     def invented(self, e): return e.body.visit(self)
@@ -258,11 +260,14 @@ def main(arguments):
     timestamp = datetime.datetime.now().isoformat()
     outputDirectory = "experimentOutputs/text/%s"%timestamp
     os.system("mkdir -p %s"%outputDirectory)
+    arguments["outputDirectory"] = outputDirectory
 
     generator = ecIterator(baseGrammar, train,
                            testingTasks=test + challenge,
-                           outputPrefix="%s/text"%outputDirectory,
                            evaluationTimeout=evaluationTimeout,
                            **arguments)
     for result in generator:
         pass
+
+def getTextGrammar(tasks):
+    return {t: Grammar.uniform(primitives + [p for p in bootstrapTarget()] + [Primitive(constant, tlist(tcharacter), constant) for constant in t.stringConstants]) for t in tasks}

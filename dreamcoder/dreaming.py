@@ -2,7 +2,7 @@ import json
 import os
 import subprocess
 
-from pathos.multiprocessing import Pool
+# from pathos.multiprocessing import Pool
 
 from dreamcoder.domains.arithmetic.arithmeticPrimitives import k1, k0, addition, subtraction, multiplication
 from dreamcoder.frontier import Frontier, FrontierEntry

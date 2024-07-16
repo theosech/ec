@@ -1,5 +1,4 @@
 import datetime
-
 import dill
 
 from dreamcoder.compression import induceGrammar
@@ -10,8 +9,8 @@ from dreamcoder.taskBatcher import *
 from dreamcoder.primitiveGraph import graphPrimitives
 from dreamcoder.dreaming import backgroundHelmholtzEnumeration
 
-from dreamcoder.domains.list.propSimModel import PropSimModel
-from dreamcoder.domains.list.utilsProperties import enumerateHelmholtzOcaml
+from dreamcoder.properties.propSimRecognitionModel import PropSimRecognitionModel
+from dreamcoder.properties.utils import enumerateHelmholtzOcaml
 
 
 class ECResult():
@@ -100,7 +99,12 @@ class ECResult():
                      "skiptesting":"st",
                      "trainset":"tset",
                      "dopruning":"dp",
-                     "noConsolidation":"noConsol"}
+                     "noConsolidation":"noConsol",
+                     "propUseEmbeddings": "pE",
+                     "propsToUse": "pU",
+                     "propSamplingMethod": "pSM",
+                     "equalWeightProperties": "eWP",
+                     }
 
     @staticmethod
     def abbreviate(parameter): return ECResult.abbreviations.get(parameter, parameter)
@@ -190,27 +194,39 @@ def ecIterator(grammar, tasks,
                doshaping=False, 
                dopruning=False,
                skiptesting=False,
-               featureExtractorArgs={},
                epochs=99999,
-               propSim=False,
                earlyStopping=False,
                verbose=False,
-
                numHelmFrontiers=None,
+               # parameter related to property similarity recognition model
+               propertyRequest=None,
+               propSim=False,
+               propUseEmbeddings=None,
+               propSolver=None,
+               propToUse=None,
+               propCPUs=None,
                onlyUseTrueProperties=None, 
                nSim=None, 
                propPseudocounts=None,
                weightedSim=None,
-               weightByPrior=None,
+               weightByProgramPrior=None,
+               weightByPropertyPrior=None,
                taskSpecificInputs=None,
                computePriorFromTasks=None,
                filterSimilarProperties=None,
                maxFractionSame=None,
                helmEnumerationTimeout=None,
                valuesToInt=None,
+               propSamplingMethod=None,
+               propScoringMethod=None,
+               propSamplingGrammarWeights=None,
+               propAddZeroToNinePrims=None,
+               propEnumerationTimeout=None,
+               propUseConjunction=None,
+               equalWeightProperties=None,
+               compressSimilar=None,
+               propFilename=None
             ):
-
-    print("valuesToInt", valuesToInt)
 
     if enumerationTimeout is None:
         eprint(
@@ -254,7 +270,6 @@ def ecIterator(grammar, tasks,
             "parallelTest",
             "propSim",
             "verbose",
-            "featureExtractorArgs",
             "epochs",
             "noConsolidation",
             "solver",
@@ -293,7 +308,8 @@ def ecIterator(grammar, tasks,
             "maxFractionSame",
             "verbose",
             "valuesToInt",
-            "weightByPrior",
+            "weightByProgramPrior",
+            "weightByPropertyPrior",
             "helmEnumerationTimeout"
             } and v is not None}
 
@@ -318,9 +334,6 @@ def ecIterator(grammar, tasks,
     def checkpointPath(iteration, extra=""):
         
         parameters["iterations"] = iteration
-        # if parameters["featureExtractorArgs"] is not None:
-        #     for key, val in parameters['featureExtractorArgs'].items():
-        #         parameters[key] = val
 
         kvs = [
             "{}={}".format(
@@ -328,7 +341,9 @@ def ecIterator(grammar, tasks,
                 parameters[k]) for k in sorted(
                 parameters.keys())]
 
-        return "{}_{}{}.pickle".format(outputPrefix, "_".join(kvs), extra)
+        MAX_CHAR_LIMIT = 230
+        filename = "{}_{}{}".format(outputPrefix, "_".join(kvs), extra)
+        return filename[:MAX_CHAR_LIMIT] + ".pickle"
 
     if message:
         message = " (" + message + ")"
@@ -518,11 +533,36 @@ def ecIterator(grammar, tasks,
             if all( f.empty for f in result.allFrontiers.values() ): thisRatio = 1.                
 
             if propSim:
-                tasksHitBottomUp = \
-                    sleep_propsim(result, j, grammar, wakingTaskBatch, tasks, result.allFrontiers.values(), ensembleSize, featureExtractor, contextual, 
-                                enumerationTimeout, evaluationTimeout, maximumFrontier, cuda, CPUs, solver, featureExtractorArgs, numHelmFrontiers,
-                                onlyUseTrueProperties, nSim, propPseudocounts, weightedSim, weightByPrior, taskSpecificInputs,
-                                computePriorFromTasks, filterSimilarProperties, maxFractionSame, valuesToInt, helmEnumerationTimeout, outputDirectory, verbose)
+                # tasksHitBottomUp = \
+                    # sleep_propsim(result, j, grammar, wakingTaskBatch, tasks, testingTasks, result.allFrontiers.values(), ensembleSize, featureExtractor, contextual, 
+                    #             enumerationTimeout, evaluationTimeout, maximumFrontier, cuda, CPUs, solver, numHelmFrontiers,
+                    #             onlyUseTrueProperties, nSim, propPseudocounts, weightedSim, weightByProgramPrior, weightByPropertyPrior, taskSpecificInputs,
+                    #             computePriorFromTasks, filterSimilarProperties, maxFractionSame, valuesToInt, helmEnumerationTimeout,
+                    #             propUseEmbeddings,
+                    #             propToUse,
+                    #             propScoringMethod,
+                    #             propSolver,
+                    #             propCPUs,
+                    #             propEnumerationTimeout,
+                    #             propFilename,
+                    #             outputDirectory, verbose)
+                tasksHitBottomUp = sleep_propsim(result=result, j=j, grammar=grammar, taskBatch=wakingTaskBatch, tasks=tasks, testingTasks=testingTasks, allFrontiers=result.allFrontiers.values(), ensembleSize=ensembleSize, featureExtractor=featureExtractor, contextual=contextual,
+                        enumerationTimeout=enumerationTimeout, evaluationTimeout=evaluationTimeout, maximumFrontier=maximumFrontier, cuda=cuda, CPUs=CPUs, solver=solver,
+                        numHelmFrontiers=numHelmFrontiers, onlyUseTrueProperties=onlyUseTrueProperties, nSim=nSim, propPseudocounts=propPseudocounts, weightedSim=weightedSim, weightByProgramPrior=weightByProgramPrior, weightByPropertyPrior=weightByPropertyPrior, taskSpecificInputs=taskSpecificInputs,
+                        computePriorFromTasks=computePriorFromTasks, filterSimilarProperties=filterSimilarProperties, maxFractionSame=maxFractionSame, valuesToInt=valuesToInt, helmEnumerationTimeout=helmEnumerationTimeout, 
+                        propUseEmbeddings=propUseEmbeddings,
+                        propToUse=propToUse,
+                        propScoringMethod=propScoringMethod,
+                        propSolver=propSolver,
+                        propCPUs=propCPUs,
+                        propEnumerationTimeout=propEnumerationTimeout,
+                        propFilename=propFilename,
+                        propAddZeroToNinePrims=propAddZeroToNinePrims,
+                        propUseConjunction=propUseConjunction,
+                        propertyRequest=propertyRequest,
+                        outputDirectory=outputDirectory, 
+                        verbose=verbose
+                )
             else:
                 tasksHitBottomUp = \
                     sleep_recognition(result, grammar, wakingTaskBatch, tasks, testingTasks, result.allFrontiers.values(),
@@ -534,7 +574,7 @@ def ecIterator(grammar, tasks,
                                helmholtzRatio=thisRatio, helmholtzFrontiers=None,
                                auxiliaryLoss=auxiliaryLoss, cuda=cuda, CPUs=CPUs, solver=solver,
                                recognitionSteps=recognitionSteps, maximumFrontier=maximumFrontier, 
-                               featureExtractorArgs=featureExtractorArgs, epochs=epochs, helmEnumerationTimeout=helmEnumerationTimeout, numHelmFrontiers=numHelmFrontiers)
+                               epochs=epochs, helmEnumerationTimeout=helmEnumerationTimeout, numHelmFrontiers=numHelmFrontiers)
 
             showHitMatrix(tasksHitTopDown, tasksHitBottomUp, wakingTaskBatch)
             
@@ -655,32 +695,64 @@ def default_wake_generative(grammar, tasks,
     summaryStatistics("Generative model", [t for t in times.values() if t is not None])
     return topDownFrontiers, times
 
-def sleep_propsim(result, j, grammar, taskBatch, tasks, allFrontiers, ensembleSize, featureExtractor, contextual, 
-    enumerationTimeout, evaluationTimeout, maximumFrontier, cuda, CPUs, solver, featureExtractorArgs,
-    numHelmFrontiers, onlyUseTrueProperties, nSim, propPseudocounts, weightedSim, weightByPrior, taskSpecificInputs,
-    computePriorFromTasks, filterSimilarProperties, maxFractionSame, valuesToInt, helmEnumerationTimeout, outputDirectory, verbose):
+def sleep_propsim(result, j, grammar, taskBatch, tasks, testingTasks, allFrontiers, ensembleSize, featureExtractor, contextual, 
+    enumerationTimeout, evaluationTimeout, maximumFrontier, cuda, CPUs, solver,
+    numHelmFrontiers, onlyUseTrueProperties, nSim, propPseudocounts, weightedSim, weightByProgramPrior, weightByPropertyPrior, taskSpecificInputs,
+    computePriorFromTasks, filterSimilarProperties, maxFractionSame, valuesToInt, helmEnumerationTimeout, 
+    propUseEmbeddings,
+    propToUse,
+    propScoringMethod,
+    propSolver,
+    propCPUs,
+    propEnumerationTimeout,
+    propFilename,
+    propAddZeroToNinePrims,
+    propUseConjunction,
+    propertyRequest,
+    outputDirectory, 
+    verbose):
+
+    print("Running sleep_propsim")
     
     # initialize property feature extractor, sampling properties if needed
     properties = None
     if result.recognitionModel is not None:
         properties = result.recognitionModel.featureExtractor.properties[::]
-    propertyFeatureExtractors = [featureExtractor(tasksToSolve=taskBatch, allTasks=tasks, grammar=grammar, properties=properties, cuda=cuda, featureExtractorArgs=featureExtractorArgs) for i in range(ensembleSize)]
-    recognizers = [PropSimModel(propertyFeatureExtractors[i],grammar,
+
+    print(f"Initializing property feature extractors: {featureExtractor} for ensemble size {ensembleSize}")
+    propertyFeatureExtractors = [featureExtractor(tasksToSolve=taskBatch, testingTasks=testingTasks, allFrontiers=allFrontiers, 
+        propUseEmbeddings=propUseEmbeddings,
+        propToUse=propToUse,
+        propScoringMethod=propScoringMethod,
+        propSolver=propSolver,
+        propCPUs=propCPUs,
+        propEnumerationTimeout=propEnumerationTimeout,
+        propFilename=propFilename,
+        propAddZeroToNinePrims=propAddZeroToNinePrims,
+        propUseConjunction=propUseConjunction,
+        propertyRequest=propertyRequest,
+        grammar=grammar, properties=properties, cuda=cuda) for i in range(ensembleSize)]
+    recognizers = [PropSimRecognitionModel(propertyFeatureExtractors[i],grammar,
                  rank=None,contextual=contextual,mask=False,
                  cuda=cuda, id=i) for i in range(ensembleSize)]
 
-    # enumerate helmholtz tasks from which to select n most similar
-    helmholtzFrontiers = enumerateHelmholtzOcaml(tasks, grammar, helmEnumerationTimeout, CPUs, propertyFeatureExtractors[0], save=False)
-    # use for debug only locally where we can't do Ocaml enumeration
-    # helmholtzFrontiers = [f for f in allFrontiers if len(f.entries) > 0]
+    try:
+        helmholtzFrontiers = enumerateHelmholtzOcaml(tasks, grammar, helmEnumerationTimeout, CPUs, propertyFeatureExtractors[0], save=False)
+        print("Enumerated {} helmholtz tasks".format(len(helmholtzFrontiers)))
+    except:
+        print("Failed to enumerate helmholtz tasks, using ONLY solved frontiers for task-conditioned property recognition")
+        # ideally we would use the helmholtzFrontiers to score the properties, need to get ocaml enumeration working or replace the above with python enumeration.
+        helmholtzFrontiers = [f for f in allFrontiers if len(f.entries) > 0]
+        
+    # need to enumerate for longer to get more helmholtz frontiers if this assertion fails
+    assert len(helmholtzFrontiers) > 0
 
-    print("Enumerated {} helmholtz tasks".format(len(helmholtzFrontiers)))
     if numHelmFrontiers is not None and numHelmFrontiers < len(helmholtzFrontiers):
         helmholtzFrontiers.sort(key=lambda f: f.topK(1).entries[0].logPosterior, reverse=True)
         helmholtzFrontiers = helmholtzFrontiers[:min(len(helmholtzFrontiers), numHelmFrontiers)]
 
-    saveDirectory = outputDirectory + "helmholtzFrontiers_numFrontiers={}_iter={}.pkl".format(len(helmholtzFrontiers), j)
-    dill.dump(helmholtzFrontiers, open(saveDirectory, "wb"))
+    # saveDirectory = outputDirectory + "helmholtzFrontiers_numFrontiers={}_iter={}.pkl".format(len(helmholtzFrontiers), j)
+    # dill.dump(helmholtzFrontiers, open(saveDirectory, "wb"))
 
     fittedRecognizers = parallelMap(min(CPUs,len(recognizers)),
                                      lambda recognizer: recognizer.fit(
@@ -691,12 +763,13 @@ def sleep_propsim(result, j, grammar, taskBatch, tasks, allFrontiers, ensembleSi
                                         nSim, 
                                         propPseudocounts,
                                         weightedSim,
-                                        weightByPrior,
+                                        weightByProgramPrior,
                                         taskSpecificInputs,
                                         computePriorFromTasks,
                                         filterSimilarProperties,
                                         maxFractionSame,
                                         valuesToInt,
+                                        weightByPropertyPrior,
                                         verbose),
                                     recognizers,
                                     seedRandom=True, memorySensitive=True
@@ -777,10 +850,10 @@ def sleep_recognition(result, grammar, taskBatch, tasks, testingTasks, allFronti
                       previousRecognitionModel=None, recognitionSteps=None,
                       timeout=None, enumerationTimeout=None, evaluationTimeout=None,
                       helmholtzRatio=None, helmholtzFrontiers=None, maximumFrontier=None,
-                      auxiliaryLoss=None, cuda=None, CPUs=None, solver=None, featureExtractorArgs=None, epochs=None, helmEnumerationTimeout=None, numHelmFrontiers=None):
+                      auxiliaryLoss=None, cuda=None, CPUs=None, solver=None, epochs=None, helmEnumerationTimeout=None, numHelmFrontiers=None):
     eprint("Using an ensemble size of %d. Note that we will only store and test on the best recognition model." % ensembleSize)
 
-    featureExtractorObjects = [featureExtractor(tasks, grammar=grammar, testingTasks=testingTasks, cuda=cuda, featureExtractorArgs=featureExtractorArgs) for i in range(ensembleSize)]
+    featureExtractorObjects = [featureExtractor(tasks, grammar=grammar, testingTasks=testingTasks, cuda=cuda) for i in range(ensembleSize)]
     recognizers = [RecognitionModel(featureExtractorObjects[i],
                                     grammar,
                                     mask=mask,
@@ -950,7 +1023,7 @@ def commandlineArguments(_=None,
                          taskBatchSize=None, taskReranker="default",
                          extras=None,
                          storeTaskMetrics=False,
-                        rewriteTaskMetrics=True):
+                         rewriteTaskMetrics=True):
     if cuda is None:
         cuda = torch.cuda.is_available()
     print("CUDA is available?:", torch.cuda.is_available())

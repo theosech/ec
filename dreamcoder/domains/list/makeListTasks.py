@@ -67,6 +67,7 @@ def joshTasks(w):
         return list(sorted(ts,key=lambda t: t.name))
 
     else:
+        print("w", w)
         assert False
     for fn in os.listdir(directory):
         if not fn.endswith(".json"):continue

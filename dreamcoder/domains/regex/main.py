@@ -327,6 +327,7 @@ def main(args):
     args.update({
         "featureExtractor": extractor,
         "outputPrefix": "%s/regex"%(outputDirectory),
+        "outputDirectory": outputDirectory,
         "evaluationTimeout": 0.005,
         "topk_use_only_likelihood": True,
         "maximumFrontier": 10,

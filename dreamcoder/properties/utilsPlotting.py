@@ -1,10 +1,9 @@
 import dill
 import numpy as np
 import matplotlib.pyplot as plt
-import pickle
 
-from dreamcoder.domains.list.compareProperties import compare
-from dreamcoder.domains.list.utilsEval import cumulativeNumberOfTasksSolved, loadEnumerationResults
+from dreamcoder.properties.compareProperties import compare
+from dreamcoder.domains.list.experiments.utilsEval import cumulativeNumberOfTasksSolved, loadEnumerationResults
 
 DATA_DIR = "data/prop_sig/"
 ENUMERATION_RESULTS_DIR = "enumerationResults/"

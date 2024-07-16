@@ -1,11 +1,11 @@
 from dreamcoder.fragmentGrammar import FragmentGrammar
 from dreamcoder.domains.list.makeListTasks import filter_task_examples
-from dreamcoder.domains.list.propSim import *
 from dreamcoder.domains.list.runUtils import *
 from dreamcoder.domains.list.utilsBaselines import *
 from dreamcoder.domains.list.utilsEval import *
-from dreamcoder.domains.list.utilsPlotting import plotProxyResults
-from dreamcoder.domains.list.utilsProperties import *
+from dreamcoder.properties.propSim import getPropSimGrammars
+from dreamcoder.properties.utilsPlotting import plotProxyResults
+from dreamcoder.properties.utils import enumerateHelmholtzOcaml
 
 VALUES_TO_INT = {"allFalse":0, "allTrue":1, "mixed":2}
 
@@ -17,7 +17,7 @@ def iterative_propsim(args, tasks, baseGrammar, properties, initSampledFrontiers
 
     taskFittedGrammars = []
     # used only for taskOfProgram method
-    featureExtractor = LearnedFeatureExtractor(tasks=tasks, testingTasks=[], cuda=args["cuda"], grammar=baseGrammar, featureExtractorArgs=args)
+    featureExtractor = LearnedFeatureExtractor(tasks=tasks, testingTasks=[], cuda=args["cuda"], grammar=baseGrammar)
 
     for propSimIteration in range(args["propNumIters"]):
         print("\nLoading helmholtz tasks for iteration {}".format(propSimIteration))
@@ -66,7 +66,7 @@ def iterative_propsim(args, tasks, baseGrammar, properties, initSampledFrontiers
                args["propPseudocounts"], 
                args["weightedSim"], 
                compressSimilar=args["compressSimilar"], 
-               weightByPrior=args["weightByPrior"], 
+               weightByProgramPrior=args["weightByProgramPrior"], 
                recomputeTasksWithTaskSpecificInputs=args["taskSpecificInputs"],
                computePriorFromTasks=args["computePriorFromTasks"], 
                filterSimilarProperties=args["filterSimilarProperties"], 
@@ -107,8 +107,6 @@ def main(args):
     tasks = tasks[2:3] if args["singleTask"] else tasks
     prims = get_primitives(args["libraryName"])
     baseGrammar = Grammar.uniform([p for p in prims])
-    if args["randomGrammarWeights"]:
-        baseGrammar = baseGrammar.randomWeights(lambda *a: random.random())
     print("baseGrammar", baseGrammar)
 
     if "josh_rich" in args["libraryName"]:
@@ -126,43 +124,42 @@ def main(args):
     else:
         datasetName = args["dataset"]
         # this is only used for its taskOfProgram method to generate synthetic tasks
-        featureExtractor = LearnedFeatureExtractor(tasks=tasks, testingTasks=[], cuda=args["cuda"], grammar=baseGrammar, featureExtractorArgs=args)
+        featureExtractor = LearnedFeatureExtractor(tasks=tasks, testingTasks=[], cuda=args["cuda"], grammar=baseGrammar)
         libraryName = "{}_randomWeights_seed_{}".format(args["libraryName"], args["seed"]) if args["randomGrammarWeights"] else args["libraryName"]
         helmholtzFrontiers, saveDir = enumerateHelmholtzOcaml(tasks, baseGrammar, enumerationTimeout=60, CPUs=args["CPUs"], featureExtractor=featureExtractor, save=True, libraryName=libraryName, datasetName=datasetName)
     
     helmholtzFrontiers = helmholtzFrontiers[:args["numHelmFrontiers"]]
     
-    # # load/generate recognition model conditional grammar 
-    # neuralGrammars = getGrammarsFromNeuralRecognizer(LearnedFeatureExtractor, tasks, tasks, baseGrammar, {"hidden": args["hidden"]}, helmholtzFrontiers, args["save"], saveDir, datasetName, args)
-    # neuralGrammars = dill.load(open("data/prop_sig/helmholtz_frontiers/josh_rich_0_10_enumerated/13742_with_josh_fleet_0_10-inputs_neural_ep=False_RS=10000_RT=3600_hidden=64_r=0.0_contextual=False_josh_fleet_0_10_grammars.pkl", "rb"))
-    # neuralPropsigGrammars = dill.load(open("data/prop_sig/helmholtz_frontiers/josh_rich_0_10_enumerated/13742_with_josh_fleet_0_10-inputs_prop_sig_neural_ep=False_RS=10000_RT=3600_hidden=64_r=0.0_contextual=False_josh_fleet_0_10_grammars.pkl", "rb"))
+    # load/generate recognition model conditional grammar 
+    neuralGrammars = getGrammarsFromNeuralRecognizer(LearnedFeatureExtractor, tasks, tasks, baseGrammar, {"hidden": args["hidden"]}, helmholtzFrontiers, args["save"], saveDir, datasetName, args)
+    neuralGrammars = dill.load(open("data/prop_sig/helmholtz_frontiers/josh_rich_0_10_enumerated/13742_with_josh_fleet_0_10-inputs_neural_ep=False_RS=10000_RT=3600_hidden=64_r=0.0_contextual=False_josh_fleet_0_10_grammars.pkl", "rb"))
+    neuralPropsigGrammars = dill.load(open("data/prop_sig/helmholtz_frontiers/josh_rich_0_10_enumerated/13742_with_josh_fleet_0_10-inputs_prop_sig_neural_ep=False_RS=10000_RT=3600_hidden=64_r=0.0_contextual=False_josh_fleet_0_10_grammars.pkl", "rb"))
     
     # load/generate propSim conditional grammar
-    # args["equalWeightProperties"] = True
+    args["equalWeightProperties"] = True
+    _, automaticProperties = get_extractor(tasks, baseGrammar, args)
+    propsimGrammarsAutomaticEqWeight = iterative_propsim(args, tasks, baseGrammar, automaticProperties, helmholtzFrontiers, saveDir=saveDir)
+
+    args["equalWeightProperties"] = False
     # _, automaticProperties = get_extractor(tasks, baseGrammar, args)
-    # propsimGrammarsAutomaticEqWeight = iterative_propsim(args, tasks, baseGrammar, automaticProperties, helmholtzFrontiers, saveDir=saveDir)
+    propsimGrammarsAutomatic = iterative_propsim(args, tasks, baseGrammar, automaticProperties, helmholtzFrontiers, saveDir=saveDir)
 
-    # args["equalWeightProperties"] = False
-    # # _, automaticProperties = get_extractor(tasks, baseGrammar, args)
-    # propsimGrammarsAutomatic = iterative_propsim(args, tasks, baseGrammar, automaticProperties, helmholtzFrontiers, saveDir=saveDir)
-
-    # args["propToUse"] = "handwritten"
-    # args["equalWeightProperties"] = True
-    # _, handwrittenProperties = get_extractor(tasks, baseGrammar, args)
-    # propsimGrammarsHandwrittenEqWeight = iterative_propsim(args, tasks, baseGrammar, handwrittenProperties, helmholtzFrontiers, saveDir=saveDir)    
+    args["propToUse"] = "handwritten"
+    args["equalWeightProperties"] = True
+    _, handwrittenProperties = get_extractor(tasks, baseGrammar, args)
+    propsimGrammarsHandwrittenEqWeight = iterative_propsim(args, tasks, baseGrammar, handwrittenProperties, helmholtzFrontiers, saveDir=saveDir)    
    
-    # args["propToUse"] = "handwritten"
-    # args["equalWeightProperties"] = False
-    # #_, handwrittenProperties = get_extractor(tasks, baseGrammar, args)
-    # propsimGrammarsHandwritten = iterative_propsim(args, tasks, baseGrammar, handwrittenProperties, helmholtzFrontiers, saveDir=saveDir)
+    args["propToUse"] = "handwritten"
+    args["equalWeightProperties"] = False
+    #_, handwrittenProperties = get_extractor(tasks, baseGrammar, args)
+    propsimGrammarsHandwritten = iterative_propsim(args, tasks, baseGrammar, handwrittenProperties, helmholtzFrontiers, saveDir=saveDir)
  
-    # # editDistGrammars = getGrammarsFromEditDistSim(tasks, baseGrammar, sampledFrontiers, args["nSim"])
+    # editDistGrammars = getGrammarsFromEditDistSim(tasks, baseGrammar, sampledFrontiers, args["nSim"])
     # generate helmholtzfitted grammar
+    helmholtzGrammar = getHelmholtzGrammar(baseGrammar, helmholtzFrontiers, tasks, insideOutside=1)
 
-    helmholtzGrammars = getHelmholtzGrammar(baseGrammar, helmholtzFrontiers, tasks, insideOutside=1)
-
-    # grammars = [propsimGrammarsHandwritten, propsimGrammarsHandwrittenEqWeight, propsimGrammarsAutomatic, propsimGrammarsAutomaticEqWeight, helmholtzGrammar, baseGrammar]
-    # modelNames = ["propsimGrammarsHandwritten", "propsimGrammarsHandwrittenEqWeight", "propsimGrammarsAutomatic", "propsimGrammarsAutomaticEqWeight", "helmholtzFitted", "uniform"]
+    grammars = [propsimGrammarsHandwritten, propsimGrammarsHandwrittenEqWeight, propsimGrammarsAutomatic, propsimGrammarsAutomaticEqWeight, helmholtzGrammar, baseGrammar]
+    modelNames = ["propsimGrammarsHandwritten", "propsimGrammarsHandwrittenEqWeight", "propsimGrammarsAutomatic", "propsimGrammarsAutomaticEqWeight", "helmholtzFitted", "uniform"]
 
     grammars = [propsimGrammarsHandwritten, propsimGrammarsHandwrittenEqWeight, propsimGrammarsAutomaticEqWeight, propsimGrammarsAutomatic, helmholtzGrammar, baseGrammar]
     modelNames = ["propsimGrammarsHandwritten", "propsimGrammarsHandwrittenEqWeight", "propsimGrammarsAutomaticEqWeight", "propsimGrammarsAutomaticEqWeight", "helmholtzFitted", "uniform"]

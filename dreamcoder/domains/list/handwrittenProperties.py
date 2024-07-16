@@ -1,9 +1,8 @@
-from dreamcoder.domains.list.property import Property
-from dreamcoder.domains.list.utilsProperties import convertToPropertyTasks
 from dreamcoder.likelihoodModel import UniqueTaskSignatureScore
-from dreamcoder.program import Primitive, Program
-from dreamcoder.grammar import Grammar
-from dreamcoder.type import tlist, tint, tbool, arrow, baseType, t1
+from dreamcoder.program import Primitive
+from dreamcoder.properties.property import Property
+from dreamcoder.properties.utils import convertToPropertyTasks
+from dreamcoder.type import tlist, tint, tbool, arrow, baseType
 
 def _everyOutputElGtEveryInputSameIdxEl(inputList, outputList):
     endIdx = min(len(inputList), len(outputList))

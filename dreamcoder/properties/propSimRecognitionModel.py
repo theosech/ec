@@ -1,8 +1,8 @@
 
-from dreamcoder.domains.list.propSim import getPropSimGrammars
+from dreamcoder.properties.propSim import getPropSimGrammars
 from dreamcoder.enumeration import multicoreEnumeration
 
-class PropSimModel:
+class PropSimRecognitionModel:
     def __init__(self,featureExtractor,grammar,
                  rank=None,contextual=False,mask=False,
                  cuda=False,
@@ -26,12 +26,13 @@ class PropSimModel:
         nSim, 
         propPseudocounts,
         weightedSim,
-        weightByPrior,
+        weightByProgramPrior,
         recomputeTasksWithTaskSpecificInputs,
         computePriorFromTasks,
         filterSimilarProperties,
         maxFractionSame,
         valuesToInt,
+        weightByPropertyPrior,
         verbose):
 
         task2FittedGrammar, tasksSolved, _ = getPropSimGrammars(
@@ -45,12 +46,13 @@ class PropSimModel:
            propPseudocounts, 
            weightedSim, 
            compressSimilar=False, 
-           weightByPrior=weightByPrior,
+           weightByProgramPrior=weightByProgramPrior,
            recomputeTasksWithTaskSpecificInputs=recomputeTasksWithTaskSpecificInputs,
            computePriorFromTasks=computePriorFromTasks, 
            filterSimilarProperties=filterSimilarProperties, 
            maxFractionSame=maxFractionSame, 
            valuesToInt=valuesToInt,
+           weightByPropertyPrior=weightByPropertyPrior,
            propSimIteration=0,
            verbose=verbose)
 

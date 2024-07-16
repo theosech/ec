@@ -59,7 +59,9 @@ def multicoreEnumeration(g, tasks, _=None,
             k = (task2grammar[t], t.request)
         jobs[k] = jobs.get(k, []) + [t]
 
-    disableParallelism = len(jobs) == 1
+    # disableParallelism = len(jobs) == 1
+    disableParallelism = True
+
     parallelCallback = launchParallelProcess if not disableParallelism else lambda f, * \
         a, **k: f(*a, **k)
     if disableParallelism:
@@ -427,6 +429,9 @@ def enumerateForTasks(g, tasks, likelihoodModel, _=None,
                 # any(len(h) < mf for h, mf in zip(hits, maximumFrontiers)) and \
             numberOfPrograms = 0
 
+            # print("budget", budget)
+            # print("starting: {}, starting + timeout: {}, budget: {}, upperBound: {}".format(starting, starting + timeout, budget, upperBound))
+
             for prior, _, p in enumerator:
                 descriptionLength = -prior
                 # Shouldn't see it on this iteration
@@ -444,6 +449,7 @@ def enumerateForTasks(g, tasks, likelihoodModel, _=None,
                     #likelihood = task.logLikelihood(p, evaluationTimeout)
                     #if invalid(likelihood):
                         #continue
+
                     success, likelihood = likelihoodModel.score(p, task)
                     if not success:
                         continue

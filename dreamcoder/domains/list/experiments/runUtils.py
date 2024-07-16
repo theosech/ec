@@ -5,8 +5,8 @@ import torch
 from dreamcoder.domains.list.handwrittenProperties import handWrittenProperties, getHandwrittenPropertiesFromTemplates, tinput, toutput
 from dreamcoder.domains.list.listPrimitives import basePrimitives, primitives, McCarthyPrimitives, bootstrapTarget_extra, no_length, josh_primitives
 from dreamcoder.domains.list.makeListTasks import make_list_bootstrap_tasks, sortBootstrap, EASYLISTTASKS, joshTasks
-from dreamcoder.domains.list.propertySignatureExtractor import PropertySignatureExtractor
-from dreamcoder.domains.list.utilsPropertySampling import getPropertySamplingGrammar
+from dreamcoder.domains.list.experiments.utilsPropertySampling import getPropertySamplingGrammar
+from dreamcoder.properties.propertySignatureExtractor import PropertySignatureExtractor
 from dreamcoder.recognition import DummyFeatureExtractor, RecognitionModel
 from dreamcoder.task import Task
 from dreamcoder.type import Context, arrow, tbool, tlist, tint, t0, UnificationFailure
@@ -21,7 +21,7 @@ def list_options(parser):
 
     # parser.add_argument("--iterations", type=int, default=10)
     # parser.add_argument("--useDSL", action="store_true", default=False)
-    parser.add_argument("--libraryName",  default="property_prims", choices=[
+    parser.add_argument("--libraryName",  default="josh_3", choices=[
         "josh_1",
         "josh_2",
         "josh_3",
@@ -31,17 +31,17 @@ def list_options(parser):
         "josh_rich_0_99",
         "property_prims",
         "dc_list_domain"])
-    parser.add_argument("--propSamplingPrimitives", default="same", choices=[
-        "same",
-        "josh_1",
-        "josh_2",
-        "josh_3",
-        "josh_3.1",
-        "josh_final",
-        "josh_rich_0_10",
-        "josh_rich_0_99",
-        "property_prims",
-        "list_prims"])
+    # parser.add_argument("--propSamplingPrimitives", default="same", choices=[
+    #     "same",
+    #     "josh_1",
+    #     "josh_2",
+    #     "josh_3",
+    #     "josh_3.1",
+    #     "josh_final",
+    #     "josh_rich_0_10",
+    #     "josh_rich_0_99",
+    #     "property_prims",
+    #     "list_prims"])
     parser.add_argument(
         "--dataset",
         type=str,
@@ -57,62 +57,18 @@ def list_options(parser):
             "josh_fleet_10_99",
             "josh_fleet_0_10",
             "Lucas-old"])
-    parser.add_argument("--extractor", default="prop_sig", choices=[
-        "prop_sig",
-        "learned",
-        "combined",
-        "dummy"
-        ])
-    parser.add_argument("--hidden", type=int, default=64)
-    parser.add_argument("--randomGrammarWeights", action="store_true", default=False)
-
-    # Arguments relating to propSim
-    parser.add_argument("--equalWeightProperties", action="store_true", default=False)
-    parser.add_argument("--plotName", type=str, default=None)
-    parser.add_argument("--enumerationProxy", action="store_true", default=False)
-    parser.add_argument("--compressSimilar", action="store_true", default=False)
-    parser.add_argument("--propSim", action="store_true", default=False)
-    parser.add_argument("--helmEnumerationTimeout", type=int, default=1)
-    parser.add_argument("--propNumIters", type=int, default=1)
-    parser.add_argument("--hmfSeed", type=int, default=None)
-    parser.add_argument("--numHelmFrontiers", type=int, default=None)
-    parser.add_argument("--maxFractionSame", type=float, default=1.0)
-    parser.add_argument("--helmholtzFrontiers", type=str, default=None)
-    parser.add_argument("--propFilename", type=str, default=None)
-    parser.add_argument("--filterSimilarProperties", action="store_true", default=False)
-    parser.add_argument("--computePriorFromTasks", action="store_true", default=False)
-    parser.add_argument("--nSim", type=int, default=50)
-    parser.add_argument("--propPseudocounts", type=int, default=1)
-    parser.add_argument("--onlyUseTrueProperties", action="store_true", default=False)
-    parser.add_argument("--save", action="store_true", default=False)
-    parser.add_argument("--verbose", action="store_true", default=False)
-    parser.add_argument("--weightByPrior", action="store_true", default=False)
-    parser.add_argument("--weightedSim", action="store_true", default=False)
-    parser.add_argument("--taskSpecificInputs", action="store_true", default=False)
-    parser.add_argument("--earlyStopping", action="store_true", default=False)
-    parser.add_argument("--singleTask", action="store_true", default=False)
-    parser.add_argument("--debug", action="store_true", default=False)
-    parser.add_argument("--propCPUs", type=int, default=numberOfCPUs())
-    parser.add_argument("--propSolver",default="ocaml",type=str)
-    parser.add_argument("--propScoringMethod", default="unique_task_signature", choices=[
-        "per_task_discrimination",
-        "unique_task_signature",
-        "general_unique_task_signature",
-        "per_similar_task_discrimination",
-        "per_task_surprisal"
-        ])
-    parser.add_argument("--propDreamTasks", action="store_true", default=False)
-    parser.add_argument("--propToUse", default="handwritten", choices=[
-        "handwritten",
-        "preloaded",
-        "sample"
-        ])
-    parser.add_argument("--propSamplingGrammarWeights", default="same", choices=[
-        "same",
-        "fitted",
-        "random"
-        ])
-    parser.add_argument("--propUseEmbeddings", action="store_true", default=False)
+    # parser.add_argument("--extractor", default="prop_sig", choices=[
+    #     "prop_sig",
+    #     "learned",
+    #     "combined",
+    #     "dummy"
+    #     ])
+    # parser.add_argument("--hidden", type=int, default=64)
+    
+    # Arguments related to experiments/propSimMain.py for experiments enumerating from property-fitted grammar and baselines (NOT full dreamcoder run)
+    # parser.add_argument("--plotName", type=str, default=None)
+    # parser.add_argument("--enumerationProxy", action="store_true", default=False)
+    # parser.add_argument("--helmholtzFrontiers", type=str, default=None)
 
 try:
     from dreamcoder.recognition import RecurrentFeatureExtractor
@@ -150,8 +106,7 @@ try:
 
             return tokenized
 
-        def __init__(self, tasks, testingTasks=[], cuda=False, grammar=None, featureExtractorArgs=None):
-            self.featureExtractorArgs = featureExtractorArgs
+        def __init__(self, tasks, testingTasks=[], cuda=False, grammar=None):
             self.lexicon = set(flatten((t.examples for t in tasks + testingTasks), abort=lambda x: isinstance(
                 x, str))).union({"LIST_START", "LIST_END", "?"})
 
@@ -189,13 +144,12 @@ class CombinedExtractor(nn.Module):
         helmholtzTimeout=0.25,
         # What should be the timeout for running a Helmholtz program?
         helmholtzEvaluationTimeout=0.01,
-        grammar=None,
-        featureExtractorArgs=None):
+        grammar=None):
         super(CombinedExtractor, self).__init__()
 
         self.propSigExtractor = PropertySignatureExtractor(tasks=tasks, testingTasks=testingTasks, H=H, embedSize=embedSize, helmholtzTimeout=helmholtzTimeout, helmholtzEvaluationTimeout=helmholtzEvaluationTimeout,
-            cuda=cuda, grammar=grammar, featureExtractorArgs=featureExtractorArgs)
-        self.learnedFeatureExtractor = LearnedFeatureExtractor(tasks=tasks, testingTasks=testingTasks, cuda=cuda, grammar=grammar, featureExtractorArgs=featureExtractorArgs)
+            cuda=cuda, grammar=grammar)
+        self.learnedFeatureExtractor = LearnedFeatureExtractor(tasks=tasks, testingTasks=testingTasks, cuda=cuda, grammar=grammar)
 
         # self.propSigExtractor = PropertySignatureExtractor
         # self.learnedFeatureExtractor = LearnedFeatureExtractor
@@ -252,6 +206,7 @@ def retrieveJSONTasks(filename, features=False):
     ) for item in loaded]
 
 def get_tasks(dataset):
+    print("Loading tasks for dataset: ", dataset)
     tasks = {
         "Lucas-old": lambda: retrieveJSONTasks("data/list_tasks.json") + sortBootstrap(),
         "bootstrap": make_list_bootstrap_tasks,
@@ -269,6 +224,9 @@ def get_tasks(dataset):
         "josh_fleet_0_10": lambda: joshTasks("fleet_0_10"),
         "josh_fleet_10_99": lambda: joshTasks("fleet_10_99")
     }[dataset]()
+
+    if "josh" in dataset:
+        tasks = [t for t in tasks if int(t.name[:3]) < 81 and "_1" in t.name]
 
     return tasks
 
@@ -298,18 +256,17 @@ def get_extractor_class(extractorName):
 
 def get_extractor(tasks, baseGrammar, args):
 
-    extractorName = args["extractor"]
+    extractorName = args.pop("extractor")
     extractor = get_extractor_class(extractorName)
+    propFilename = args["propFilename"]
 
     if extractorName == "learned":
-        return extractor(tasks=tasks, testingTasks=[], cuda=args["cuda"], grammar=baseGrammar, featureExtractorArgs=args)
+        return extractor(tasks=tasks, testingTasks=[], cuda=args["cuda"], grammar=baseGrammar)
 
     elif extractorName == "prop_sig" or extractorName == "combined":
-        featureExtractorArgs = args
-
         if args["propToUse"] == "handwritten":
             properties = getHandwrittenPropertiesFromTemplates(tasks)
-            featureExtractor = extractor(tasksToSolve=tasks, testingTasks=[], grammar=baseGrammar, cuda=False, featureExtractorArgs=featureExtractorArgs, properties=properties)
+            featureExtractor = extractor(tasksToSolve=tasks, testingTasks=[], grammar=baseGrammar, cuda=False, properties=properties)
             print("Loaded {} properties from: {}".format(len(properties), "handwritten"))
         
         elif args["propToUse"] == "preloaded":
@@ -320,7 +277,7 @@ def get_extractor(tasks, baseGrammar, args):
                 properties = list(properties.values())[0]
                 # filter properties that are only on inputs
                 properties = [p for p in properties if "$0" in p.name]
-            featureExtractor = extractor(tasksToSolve=tasks, testingTasks=[], grammar=baseGrammar, cuda=False, featureExtractorArgs=featureExtractorArgs, properties=properties)
+            featureExtractor = extractor(tasksToSolve=tasks, testingTasks=[], grammar=baseGrammar, cuda=False, properties=properties)
             print("Loaded {} properties from: {}".format(len(properties), propFilename))
         
         elif args["propToUse"] == "sample":
@@ -330,7 +287,7 @@ def get_extractor(tasks, baseGrammar, args):
             propertyRequest = arrow(tlist(tint), tlist(tint), tbool)
             propertyGrammar = getPropertySamplingGrammar(baseGrammar, args["propSamplingGrammarWeights"], args, pseudoCounts=1, seed=args["seed"])
             try:        
-                featureExtractor = extractor(tasksToSolve=tasksToSolve, testingTasks=tasks, grammar=baseGrammar, propertyGrammar=propertyGrammar, cuda=False, featureExtractorArgs=featureExtractorArgs, propertyRequest=propertyRequest)
+                featureExtractor = extractor(tasksToSolve=tasksToSolve, testingTasks=tasks, grammar=baseGrammar, propertyGrammar=propertyGrammar, cuda=False, propertyRequest=propertyRequest)
             except AssertionError:
                 raise Exception("0 properties found")
 
@@ -345,7 +302,7 @@ def get_extractor(tasks, baseGrammar, args):
 
             if args["save"]:
                 filename = "sampled_properties_weights={}_sampling_timeout={}s_seed={}.pkl".format(
-                    args["propSamplingGrammarWeights"], int(featureExtractorArgs["propEnumerationTimeout"]), args["seed"])
+                    args["propSamplingGrammarWeights"], args["propEnumerationTimeout"], args["seed"])
                 savePath = DATA_DIR + SAMPLED_PROPERTIES_DIR + filename
                 dill.dump(allProperties, open(savePath, "wb"))
                 print("Saving sampled properties at: {}".format(savePath))
@@ -357,4 +314,22 @@ def get_extractor(tasks, baseGrammar, args):
                     properties.add(p)
             properties = list(properties)
 
-        return featureExtractor, properties
+        return featureExtractor
+
+def loadSampledTasks(k=1, batchSize=100, n=10000, dslName="jrule", isSample=True):
+
+    tasksType = "samples" if isSample else "enumerated"
+    allFrontiers = []
+    for i in range(0,n,batchSize):
+            with open("data/prop_sig/{}_{}_{}/{}_{}-{}.pkl".format(dslName, tasksType, k, tasksType, i, i + batchSize), "rb") as f:
+                frontiers = dill.load(f)
+                # if sampled task has more than 11 examples keep only the first 11
+                for j,f in enumerate(frontiers):
+                    numExamples = min(len(f.task.examples), 11)
+                    f.task.examples = f.task.examples[:numExamples]
+                allFrontiers.extend(frontiers)
+
+    # remove the 1981st frontier becuase it is too large
+    if k == 1 and dslName == "josh_rich":
+        allFrontiers = allFrontiers[:1981] + allFrontiers[1982:]
+    return allFrontiers

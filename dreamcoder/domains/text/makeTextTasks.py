@@ -95,7 +95,7 @@ def makeTasks():
     import random
     random.seed(9)
 
-    NUMBEROFEXAMPLES = 4
+    NUMBEROFEXAMPLES = 10
 
     problems = []
 
@@ -386,6 +386,7 @@ def guessConstantStrings(task):
                                 if f >= T]
     else:
         task.stringConstants = []
+    print("Guessing constants for", task.name, task.stringConstants)
                     
 
     task.BIC = 1.

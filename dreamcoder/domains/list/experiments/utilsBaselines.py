@@ -5,7 +5,7 @@ import torch
 
 from dreamcoder.type import arrow, tlist, tint
 from dreamcoder.recognition import RecognitionModel
-from dreamcoder.domains.list.utilsProperties import createFrontiersWithInputsFromTask
+from dreamcoder.properties.utils import createFrontiersWithInputsFromTask
 
 ADD_P = 0.0001
 DEL_P = 0.0001
@@ -69,15 +69,15 @@ def getGrammarsFromEditDistSim(tasks, baseGrammar, sampledFrontiers, nSim, weigh
         # for f, w in zip(similarFrontiers, similarFrontierWeights):
         #     print("{}: {}".format(f.topK(1).entries[0].program, w))
         task2Grammar[t] = baseGrammar.insideOutside(similarFrontiers, pseudoCounts, iterations=1, 
-            frontierWeights=similarFrontierWeights if weight else None, weightByPrior=False)
+            frontierWeights=similarFrontierWeights if weight else None, weightByProgramPrior=False)
 
     return task2Grammar
 
 
-def getGrammarsFromNeuralRecognizer(extractor, tasks, testingTasks, baseGrammar, featureExtractorArgs, sampledFrontiers, save, saveDirectory, datasetName, args, pklFile=None):
+def getGrammarsFromNeuralRecognizer(extractor, tasks, testingTasks, baseGrammar, sampledFrontiers, save, saveDirectory, datasetName, args, pklFile=None):
 
     recognizer = RecognitionModel(
-    featureExtractor=extractor(tasks, grammar=baseGrammar, testingTasks=testingTasks, cuda=torch.cuda.is_available(), featureExtractorArgs=featureExtractorArgs),
+    featureExtractor=extractor(tasks, grammar=baseGrammar, testingTasks=testingTasks, cuda=torch.cuda.is_available()),
     grammar=baseGrammar,
     cuda=torch.cuda.is_available(),
     contextual=False,
@@ -90,7 +90,7 @@ def getGrammarsFromNeuralRecognizer(extractor, tasks, testingTasks, baseGrammar,
         else:
             # get name of neural recognition model
             ep, CPUs, helmholtzRatio, rs, rt = args.pop("earlyStopping"), args["CPUs"], args.pop("helmholtzRatio"), args.pop("recognitionSteps"), args.pop("recognitionTimeout")
-            filename = "{}_neural_ep={}_RS={}_RT={}_hidden={}_r={}_contextual={}_0_99".format(datasetName, ep, rs, rt, featureExtractorArgs["hidden"], helmholtzRatio, args["contextual"])
+            filename = "{}_neural_ep={}_RS={}_RT={}_hidden={}_r={}_contextual={}_0_99".format(datasetName, ep, rs, rt, args["hidden"], helmholtzRatio, args["contextual"])
             path = saveDirectory + filename
             name = "{}_recognizer.pkl".format(path)
 

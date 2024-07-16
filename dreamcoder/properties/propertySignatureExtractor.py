@@ -1,21 +1,14 @@
-from dreamcoder.domains.list.listPrimitives import bootstrapTarget_extra
-from dreamcoder.domains.list.handwrittenProperties import handWrittenProperties, handWrittenPropertyFuncs, tinput, toutput, getHandwrittenPropertiesFromTemplates
-from dreamcoder.domains.list.makeListTasks import joshTasks
-from dreamcoder.domains.list.property import Property
-from dreamcoder.domains.list.utilsProperties import convertToPropertyTasks
-from dreamcoder.domains.list.utilsPropertySampling import convertToPropertyTasks, enumerateProperties
+
+from dreamcoder.domains.list.handwrittenProperties import getHandwrittenPropertiesFromTemplates
+from dreamcoder.properties.utils import convertToPropertyTasks
+from dreamcoder.properties.utilsPropertySampling import enumerateProperties
 
 from dreamcoder.dreaming import backgroundHelmholtzEnumeration
-from dreamcoder.enumeration import multicoreEnumeration
 from dreamcoder.grammar import Grammar
-from dreamcoder.likelihoodModel import UniqueTaskSignatureScore, TaskDiscriminationScore
 from dreamcoder.program import *
-from dreamcoder.recognition import variable
 from dreamcoder.task import Task
 from dreamcoder.type import tint, tlist
 
-
-import copy
 import random
 import time
 import torch
@@ -29,6 +22,7 @@ class PropertySignatureExtractor(nn.Module):
     def __init__(self, 
         tasksToSolve=[],
         testingTasks=None,
+        allFrontiers=None,
         cuda=False, 
         H=64,
         embedSize=16,
@@ -36,30 +30,40 @@ class PropertySignatureExtractor(nn.Module):
         helmholtzTimeout=0.25,
         # What should be the timeout for running a Helmholtz program?
         helmholtzEvaluationTimeout=0.01,
+        propUseEmbeddings=None,
+        propToUse=None,
+        propScoringMethod=None,
+        propSolver=None,
+        propCPUs=None,
+        propEnumerationTimeout=None,
+        propFilename=None,
         propertyGrammar=None,
+        propAddZeroToNinePrims=None,
+        propUseConjunction=None,
+        propertyRequest=None,
         grammar=None,
-        featureExtractorArgs={},
-        propertyRequest=arrow(tlist(tint), tlist(tint), tbool),
         properties=None
         ):
         super(PropertySignatureExtractor, self).__init__()
-
-        print("Initializing PropertySignatureExtractor")
-        print(featureExtractorArgs)
 
         self.special = "unique"
         self.CUDA = cuda
         self.recomputeTasks = True
         self.outputDimensionality = H
-        self.useEmbeddings = featureExtractorArgs["propUseEmbeddings"]
-        self.featureExtractorArgs = featureExtractorArgs
+        self.useEmbeddings = propUseEmbeddings
         self.grammar = grammar
         self.propertyGrammar = propertyGrammar
-
+        self.propAddZeroToNinePrims = propAddZeroToNinePrims
+        self.propUseConjunction = propUseConjunction
+        self.propScoringMethod = propScoringMethod
+        self.propToUse = propToUse
+        print("propToUse: {}".format(self.propToUse))
+        self.propSolver = propSolver
+        self.propCPUs = propCPUs
+        self.propEnumerationTimeout = propEnumerationTimeout
+        self.propFilename = propFilename
         self.allTasks = tasksToSolve + testingTasks
         self.tasksToSolve = tasksToSolve
-        print("useEmbeddings: {}".format(self.useEmbeddings))
-
         self.propertyRequest = propertyRequest
         self.propertyAllTasks = convertToPropertyTasks(self.allTasks, self.propertyRequest)
         self.propertyTasksToSolve = convertToPropertyTasks(self.tasksToSolve, self.propertyRequest)
@@ -118,7 +122,7 @@ class PropertySignatureExtractor(nn.Module):
             dreamTasks (list(Task)): python list of helmholtz-sampled Task objects
         """
 
-        helmholtzFrontiers = backgroundHelmholtzEnumeration(self.tasksToSolve, dslGrammar, 3,
+        helmholtzFrontiers = backgroundHelmholtzEnumeration(self.tasksToSolve, self.grammar, 3,
                                                             evaluationTimeout=0.001,
                                                             special="unique")
         frontiers = helmholtzFrontiers()
@@ -128,7 +132,7 @@ class PropertySignatureExtractor(nn.Module):
         dreamtTasks = []
         i = 0
         while len(dreamtTasks) < numHelmholtzTasks or i >= len(programs):
-            task = self.taskOfProgram(programs[i], arrow(tlist(tint), tlist(tint)))
+            task = self.taskOfProgram(programs[i], self.tasksToSolve[0].request)
             if task is not None:
                 dreamtTasks.append(task)
                 print("program: {}".format(programs[i]))
@@ -148,13 +152,13 @@ class PropertySignatureExtractor(nn.Module):
         #     tinputToList = Primitive("tinput_to_tlist", arrow(tinput, tlist(tint)), lambda x: x)
         #     propertyPrimitives = propertyPrimitives + [tinputToList, toutputToList]
 
-        if self.featureExtractorArgs["propAddZeroToNinePrims"]:
+        if self.propAddZeroToNinePrims:
 
             for i in range(10):
                 if str(i) not in [getattr(primitive, "name", "invented_primitive") for primitive in propertyPrimitives]:
                     propertyPrimitives.append(Primitive(str(i), tint, i))
 
-        if self.featureExtractorArgs["propUseConjunction"]:
+        if self.propUseConjunction:
             propertyPrimitives.append(Primitive("and", arrow(tbool, tbool, tbool), lambda a: lambda b: a and b))
 
         productions = [(self.grammar.expression2likelihood.get(p, maxLL), p) for p in propertyPrimitives]
@@ -165,31 +169,34 @@ class PropertySignatureExtractor(nn.Module):
 
     def _getProperties(self):
 
-        if self.featureExtractorArgs["propToUse"] == "handwritten":
+        if self.propToUse == "handwritten":
+            # raise NotImplementedError
             properties = getHandwrittenPropertiesFromTemplates(self.allTasks)
             print("Loaded {} properties from: {}".format(len(properties), "handwritten"))
             return properties
         
-        elif self.featureExtractorArgs["propToUse"] == "preloaded":
-            assert propFilename is not None
-            properties = dill.load(open(DATA_DIR + SAMPLED_PROPERTIES_DIR + self.featureExtractorArgs["propFilename"], "rb"))
-            if isinstance(properties, dict):
-                assert len(properties) == 1
-                properties = list(properties.values())[0]
-                # filter properties that are only on inputs
-                properties = [p for p in properties if "$0" in p.name]
-            return properties
+        elif self.propToUse == "preloaded":
+            raise NotImplementedError
+            # assert propFilename is not None
+            # properties = dill.load(open(DATA_DIR + SAMPLED_PROPERTIES_DIR + self.propFilename, "rb"))
+            # if isinstance(properties, dict):
+            #     assert len(properties) == 1
+            #     properties = list(properties.values())[0]
+            #     # filter properties that are only on inputs
+            #     properties = [p for p in properties if "$0" in p.name]
+            # return properties
 
         
-        elif self.featureExtractorArgs["propToUse"] == "sample":
+        elif self.propToUse == "sample":
             self.propertyGrammar = self.propertyGrammar if self.propertyGrammar is not None else self._getPropertyGrammar()
-            properties, likelihoodModel = enumerateProperties(self.featureExtractorArgs, self.propertyGrammar, self.propertyTasksToSolve, self.propertyRequest, allTasks=self.propertyAllTasks)
-            print("Loaded {} properties by enumerating for {}s".format(len(properties), self.featureExtractorArgs["propEnumerationTimeout"]))
+            properties, likelihoodModel = enumerateProperties(self.propertyGrammar, self.propertyTasksToSolve, self.propertyRequest,  self.propScoringMethod, self.propSolver, self.propCPUs, self.propEnumerationTimeout, allTasks=self.propertyAllTasks)
+            print("Loaded {} properties by enumerating for {}s".format(len(properties), self.propEnumerationTimeout))
             for p in properties:
                 print("Property:{} ({})".format(p.name, p.score))
             return properties
 
         else:
+            print("self.propToUse: {}".format(self.propToUse))
             raise NotImplementedError
 
 
@@ -200,63 +207,16 @@ class PropertySignatureExtractor(nn.Module):
         output = v.view(-1)
         return output
 
-    def featuresOfTask(self, t, onlyUseTrueProperties=True):
+    def featuresOfTask(self, t, onlyUseTrueProperties=False):
 
         if onlyUseTrueProperties:
             taskPropertyValueToInt = {"allFalse":0, "allTrue":1, "mixed":0}
-
-        def getPropertyValue(propertyName, propertyFunc, t):
-            """
-            Args:
-                propertyName (str): name of property
-                propertyFunc (function):  property function of type (exampleInput -> exampleOutput -> {False, True, None})
-                t (Task): task
-
-            Returns:
-                value_idx (int): The index of the property corresponding to propertyFunc for task t.
-                0 corresponds to False, 1 corresponds to True and 0 corresponds to Mixed
-            """
-
-            specBooleanValues = []
-            print(t.describe())
-            for example in t.examples:
-                exampleInput, exampleOutput = example[0][0], example[1]
-                print("{} -> {}".format(exampleInput, exampleOutput))
-                try:
-                    if not isinstance(exampleOutput, list):
-                        exampleOutput = [exampleOutput]
-                    if not isinstance(exampleInput, list):
-                        exampleInput = [exampleInput]
-
-                    booleanValue = propertyFunc(exampleInput)(exampleOutput)
-                    # if propertyName == "output_idx_0_equals_input_idx_6":
-                    #     print("{} -> {}".format(exampleInput, exampleOutput))
-                    #     print(booleanValue)
-
-                except Exception as e:
-                    # if propertyName == "output_idx_0_equals_input_idx_6":
-                    #     print("Failed to apply property: {}".format(propertyName))
-                    #     print("{} -> {}".format(exampleInput, exampleOutput))
-                    #     print(e)
-                    #     print("------------------------------------------------")
-                    booleanValue = None
-
-                # property can't be applied to this io example and so property for the whole spec is Mixed (2)
-                if booleanValue is None:
-                    return taskPropertyValueToInt["mixed"]
-                specBooleanValues.append(booleanValue)
-
-            if all(specBooleanValues) is True:
-                return taskPropertyValueToInt["allTrue"]
-
-            elif all([booleanValue is False for booleanValue in specBooleanValues]):
-                return taskPropertyValueToInt["allFalse"]
-            return taskPropertyValueToInt["mixed"]
+        else:
+            taskPropertyValueToInt = {"allFalse":0, "allTrue":1, "mixed":2}
 
         booleanPropertyValues = []
         for prop in self.properties:
             propertyValue = prop.getValue(t)
-            # propertyValue = getPropertyValue(propertyName, propertyProgram, t)
             booleanPropertyValues.append(taskPropertyValueToInt[propertyValue])
         
         booleanPropSig = torch.tensor(booleanPropertyValues, device=self.device)
@@ -317,103 +277,6 @@ class PropertySignatureExtractor(nn.Module):
                 if len(ys) == len(xss):
                     return Task("Helmholtz", tp, list(zip(xss, ys)))
             return None
-
-
-def testPropertySignatureFeatureExtractor(task_idx):
-    from dreamcoder.domains.list.makeListTasks import make_list_bootstrap_tasks
-    tasks = make_list_bootstrap_tasks()
-    tasks = [task for task in tasks if task.request == arrow(tlist(tint), tlist(tint))]
-    print("{} tasks".format(len(tasks)))
-    task = tasks[task_idx]
-    featureExtractor = PropertySignatureExtractor(tasks=tasks, useEmbeddings=False)
-
-    print("Task: {}".format(task))
-    for i,o in task.examples:
-        print("{} -> {}".format(i[0], o))
-
-    featureExtractor.featuresOfTask(task)
-    propertySig = featureExtractor.test
-
-    for i,propertyName in enumerate([propertyName for propertyName, propertyFunc in featureExtractor.properties]):
-        print("{}: {}".format(propertyName, propertySig[i]))
-    return
-
-
-def testPropertySignatureExtractorHandwritten():
-
-    def getTask(name, tasks):
-        return [t for t in tasks if t.name == name][0]
-
-
-    featureExtractorArgs = {
-        "propCPUs": None,
-        "propSolver": None,
-        "propSamplingTimeout": None,
-        "propUseConjunction": None,
-        "propAddZeroToNinePrims": None,
-        "propScoringMethod": None,
-        "propDreamTasks": None,
-        "propUseHandWrittenProperties": True,
-        "propSamplingGrammar": None,
-        "primLibraries": None
-    }
-
-    tasks = joshTasks("3")
-    extractor = PropertySignatureExtractor(tasks=tasks, useEmbeddings=False, featureExtractorArgs=featureExtractorArgs)
-    propertyNames = [el[0] for el in extractor.properties]
-    
-    task = getTask("005_1", tasks)
-    extractor.featuresOfTask(task)
-    v = extractor.test
-    
-    assert v[propertyNames.index("output_list_length_1")] == 1
-    assert v[propertyNames.index("output_els_in_input")] == 1
-    assert v[propertyNames.index("input_els_in_output")] == 2
-    assert v[propertyNames.index("output_shorter_than_input")] == 1
-    assert v[propertyNames.index("output_idx_0_equals_input_idx_3")] == 2
-
-    task = getTask("003_1", tasks)
-    extractor.featuresOfTask(task)
-    v = extractor.test
-
-    assert v[propertyNames.index("output_list_length_1")] == 1
-    assert v[propertyNames.index("output_shorter_than_input")] == 1
-    assert v[propertyNames.index("output_idx_0_equals_input_idx_6")] == 1
-    assert v[propertyNames.index("output_idx_0_equals_input_idx_0")] == 2
-
-    task = getTask("008_1", tasks)
-    extractor.featuresOfTask(task)
-    v = extractor.test
-
-    assert v[propertyNames.index("output_list_length_1")] == 0
-    assert v[propertyNames.index("output_list_length_6")] == 1
-    assert v[propertyNames.index("output_shorter_than_input")] == 1
-    assert v[propertyNames.index("output_idx_0_equals_input_idx_0")] == 1
-    assert v[propertyNames.index("output_idx_1_equals_input_idx_1")] == 1
-    assert v[propertyNames.index("output_idx_2_equals_input_idx_2")] == 1
-    assert v[propertyNames.index("output_idx_3_equals_input_idx_3")] == 1
-    assert v[propertyNames.index("output_idx_4_equals_input_idx_4")] == 1
-    assert v[propertyNames.index("output_idx_5_equals_input_idx_5")] == 1
-    assert v[propertyNames.index("output_idx_6_equals_input_idx_6")] == 2
-    assert v[propertyNames.index("output_contains_input_idx_0")] == 1
-    assert v[propertyNames.index("output_contains_input_idx_8")] == 2
-
-    task = getTask("041_1", tasks)
-    extractor.featuresOfTask(task)
-    v = extractor.test
-
-    assert v[propertyNames.index("output_contains_9")] == 1
-    assert v[propertyNames.index("output_contains_8")] == 0
-    assert v[propertyNames.index("all_output_els_mod_3_equals_0")] == 1
-    assert v[propertyNames.index("all_output_els_mod_9_equals_0")] == 1
-    assert v[propertyNames.index("all_output_els_mod_4_equals_0")] == 0
-    assert v[propertyNames.index("all_output_els_lt_10")] == 1
-    assert v[propertyNames.index("all_output_els_lt_3")] == 0
-
-
-if __name__ == "__main__":
-    pass
-    
 
 
 
